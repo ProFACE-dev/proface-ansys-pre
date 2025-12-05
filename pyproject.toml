@@ -1,0 +1,75 @@
+# SPDX-FileCopyrightText: 2025 ProFACE developers
+#
+# SPDX-License-Identifier: MIT
+
+[project]
+dynamic = ["version"]
+name = "proface-ansys-pre"
+description = "Ansys ProFACE preprocessor plugin"
+readme = "README.md"
+authors = [
+    { name = "ProFACE developers", email = "proface@polimi.it" },
+    { name = "Giuliano Minerva", email = "giuliano.minerva@polimi.it" },
+    { name = "Stefano Miccoli", email = "stefano.miccoli@polimi.it" },
+]
+requires-python = ">=3.12"
+dependencies = [
+    "proface-pre>=0.2.1",
+    "ansys-dpf-core==0.14.2",
+    "numpy>=2.2.3",
+    "awkward>=2.7.4",
+]
+
+[project.entry-points.'proface.preprocessor']
+ansys = "proface.ansys.preprocessor:main"
+
+[build-system]
+requires = ["hatchling", "hatch-vcs"]
+build-backend = "hatchling.build"
+
+[dependency-groups]
+dev = [
+    "mypy>=1.17.1",
+]
+
+#
+# hatch
+#
+[tool.hatch.version]
+source = "vcs"
+[tool.hatch.build.hooks.vcs]
+version-file = "src/proface/ansys/preprocessor/_version.py"
+[tool.hatch.build.targets.wheel]
+packages = ["src/proface"]
+
+#
+# ruff
+#
+[tool.ruff]
+line-length = 80
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["A", "ARG", "B", "BLE", "C4", "C90", "COM818",
+  "E", "W", "EM", "F", "FA", "FBT", "FLY", "G", "I", "ICN",
+  "INP", "INT", "ISC", "N", "NPY", "PERF", "PGH", "PIE",
+  "PLE", "PLR", "PLW", "PT", "PYI", "RET", "RUF", "S",
+  "SIM", "SLF", "SLOT", "T10", "T20", "TC", "TRY", "TID",
+  "UP", "YTT",
+]
+ignore = ["S101", "PT015", "B011", "TRY400"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["proface"]
+
+#
+# mypy
+#
+[tool.mypy]
+explicit_package_bases = true
+namespace_packages = true
+mypy_path = "$MYPY_CONFIG_FILE_DIR/src"
+
+[[tool.mypy.overrides]]
+module = ["ansys.dpf.*", "awkward"]
+ignore_missing_imports = true

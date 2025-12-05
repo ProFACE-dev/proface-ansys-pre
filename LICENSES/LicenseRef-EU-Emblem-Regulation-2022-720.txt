@@ -1,0 +1,26 @@
+LicenseRef-EU-Emblem-Regulation-2022-720
+SPDX-URL: https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=CELEX:32022R0720
+SPDX-Notes: This license describes the permitted use of the European Union emblem (“EU flag”)
+in accordance with Council Regulation (EU) 2022/720 and the European Commission’s
+“Rules for the use of the European Union emblem in the context of EU funding”.
+
+Summary:
+  - There are no copyright restrictions on the reproduction of the European Union emblem.
+  - Use of the emblem by third parties is permitted only if such use is not likely
+    to create the impression that there is a connection between the user and
+    the European Union or the European Commission, or that the Union or the
+    Commission endorses the user or its products or services.
+  - Any use of the emblem which the European Commission considers to be inappropriate
+    or incompatible with these rules may be prohibited.
+  - The emblem must be reproduced in accordance with the graphic standards and
+    the rules of use published by the European Commission.
+
+Full legal text:
+  Council Regulation (EU) 2022/720 of 26 April 2022 on the use of the European emblem
+  by third parties (OJ L 133, 3.5.2022, p. 1–3).
+
+Source:
+  https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=CELEX:32022R0720
+
+Attribution:
+  © European Union
