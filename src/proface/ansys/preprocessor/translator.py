@@ -122,9 +122,16 @@ def main(*, job: dict[str, Any], job_path: Path, h5: H5Container) -> None:
 def _load_server() -> DPFServerType:
     "return DPF server instance"
 
-    # FIXME: patch to suppress noisy logging from GRPC
+    #
+    # prepare environment for suppressing noisy message from
+    # ansys-dpf-core and grpcio
+    #
+    # ansys-dpf-core:
+    noisylog = logging.getLogger("ansys.dpf.core.server_types")
+    noisylog.setLevel(logging.NOTSET)
+    # grpcio:
     os.environ["GRPC_VERBOSITY"] = "ERROR"
-    # FIXME: patch to prevent tqdm progress bars from popping out of nowhere
+    # tqdm:
     os.environ["TQDM_DISABLE"] = "1"
 
     try:
