@@ -42,6 +42,9 @@ rst = "example.rst"
 id = 1
 ```
 
+The result `id` is the one-based cumulative time/frequency set ID shown in the
+DPF time/frequency support table.
+
 ## License
 
 ProFACE-Ansys-Pre is licensed under the MIT license.

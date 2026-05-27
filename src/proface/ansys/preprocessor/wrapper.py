@@ -188,18 +188,15 @@ class Model(AbstractContextManager["Model"]):
 
     @property
     def time_ids(self) -> DPFIdsType:
-        """list of available time ids"""
+        """list of available cumulative time/frequency result set ids"""
         ret: DPFIdsType
         if self.closed:
             msg = "Operation on closed model"
             raise ValueError(msg)
-        ret = (
-            self._model.metadata.time_freq_support.time_frequencies.scoping.ids
+        ret = np.arange(
+            1,
+            self._model.metadata.time_freq_support.n_sets + 1,
+            dtype=np.int32,
         )
-        # FIXME: why code below can give different results?
-        # ret = (
-        #     self._model.metadata.time_freq_support
-        #     .prop_field_support_by_property("time_freqs_cumulative_ids").data
-        # )
 
         return ret

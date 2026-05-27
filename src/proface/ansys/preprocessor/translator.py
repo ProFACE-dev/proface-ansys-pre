@@ -46,7 +46,7 @@ assert all(
 
 # type aliases
 type H5Container = Any
-type AnsysTimeID = int
+type AnsysCumulativeTimeID = int
 
 
 class AnsysTranslatorError(PreprocessorError):
@@ -198,7 +198,7 @@ def _main(
         #     )
 
         ts_ip = model_ip.time_ids
-        logger.debug("Detected ip model cumulative time ids: %s", ts)
+        logger.debug("Detected ip model cumulative time ids: %s", ts_ip)
         if not np.all(ts == ts_ip):
             msg = "Base and IP results do not share identical time support"
             logger.warning(msg)
@@ -216,31 +216,31 @@ def _main(
     # save load cases
     #
     for load_case in job["results"]:
-        time_id = job["results"][load_case]["id"]
+        cumulative_time_id = job["results"][load_case]["id"]
 
-        if not isinstance(time_id, int):
+        if not isinstance(cumulative_time_id, int):
             msg = "'id' must be an int"
             raise TypeError(msg)
 
         logger.info("Saving results %s", load_case)
-        if time_id not in ts:
+        if cumulative_time_id not in ts:
             logger.error(
-                "Results %s: time id %d not found in results",
+                "Results %s: cumulative time id %d not found in results",
                 load_case,
-                time_id,
+                cumulative_time_id,
             )
 
         h5gr = h5.create_group(f"results/{load_case}")
         # save nodal stresses
-        _s_nod(model, h5gr, time_id)
+        _s_nod(model, h5gr, cumulative_time_id)
         # save IP/centroid stresses and volumes
         if model_ip:
-            if not _identical_disp(model, model_ip, time_id):
+            if not _identical_disp(model, model_ip, cumulative_time_id):
                 msg = "Base and IP results not equal"
                 raise AnsysTranslatorError(msg)
-            _svol_ip(model_ip, h5gr, time_id)
+            _svol_ip(model_ip, h5gr, cumulative_time_id)
         else:
-            _svol_ip(model, h5gr, time_id, centroid=True)
+            _svol_ip(model, h5gr, cumulative_time_id, centroid=True)
 
 
 def _equal_mesh(ma: Model, mb: Model) -> bool:
@@ -315,14 +315,16 @@ def _sets(model: Model, h5: H5Container) -> None:
         h5.create_dataset("sets/node/internal", data=nset)
 
 
-def _s_nod(model: Model, h5: H5Container, time_id: AnsysTimeID) -> None:
+def _s_nod(
+    model: Model, h5: H5Container, time_id: AnsysCumulativeTimeID
+) -> None:
     """save S averaged at nodes, from ElementalNodal"""
-    logger.debug("Save S/SP results at time_id '%s'", time_id)
+    logger.debug("Save S/SP results at cumulative time_id '%s'", time_id)
 
     for code, ids, _conn in model.get_3del():
         scoping = dpf.Scoping(location=dpf.locations.elemental_nodal, ids=ids)
         st = (
-            model.results.stress(mesh_scoping=scoping)
+            model.results.stress(time_scoping=time_id, mesh_scoping=scoping)
             .outputs.fields_container()
             .get_field_by_time_id(time_id)
         )
@@ -346,16 +348,16 @@ def _s_nod(model: Model, h5: H5Container, time_id: AnsysTimeID) -> None:
 
 
 def _identical_disp(
-    model_a: Model, model_b: Model, time_id: AnsysTimeID
+    model_a: Model, model_b: Model, time_id: AnsysCumulativeTimeID
 ) -> bool:
     ua = (
-        model_a.operator("U")
+        model_a.results.displacement(time_scoping=time_id)
         .outputs.fields_container()
         .get_field_by_time_id(time_id)
         .data
     )
     ub = (
-        model_b.operator("U")
+        model_b.results.displacement(time_scoping=time_id)
         .outputs.fields_container()
         .get_field_by_time_id(time_id)
         .data
@@ -376,12 +378,12 @@ def _identical_disp(
 def _svol_ip(
     model: Model,
     h5: H5Container,
-    time_id: AnsysTimeID,
+    time_id: AnsysCumulativeTimeID,
     *,
     centroid: bool = False,
 ) -> None:
     """save results at IPs"""
-    logger.debug("Save IP results at time_id '%s'", time_id)
+    logger.debug("Save IP results at cumulative time_id '%s'", time_id)
 
     for code, ids, _conn in model.get_3del():
         # FIXME: do not read h5 root
@@ -392,7 +394,7 @@ def _svol_ip(
         #
         scoping = dpf.Scoping(location=dpf.locations.elemental_nodal, ids=ids)
         st = (
-            model.results.stress(mesh_scoping=scoping)
+            model.results.stress(time_scoping=time_id, mesh_scoping=scoping)
             .outputs.fields_container()
             .get_field_by_time_id(time_id)
         )
@@ -430,7 +432,9 @@ def _svol_ip(
         #
         scoping = dpf.Scoping(location=dpf.locations.elemental, ids=ids)
         ivol = (
-            model.results.elemental_volume(mesh_scoping=scoping)
+            model.results.elemental_volume(
+                time_scoping=time_id, mesh_scoping=scoping
+            )
             .outputs.fields_container()
             .get_field_by_time_id(time_id)
         )
