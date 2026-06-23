@@ -223,7 +223,7 @@ def _main(
             raise TypeError(msg)
 
         logger.info("Saving results %s", load_case)
-        if cumulative_time_id not in ts:
+        if cumulative_time_id > ts or cumulative_time_id < 1:
             logger.error(
                 "Results %s: cumulative time id %d not found in results",
                 load_case,
