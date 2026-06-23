@@ -177,7 +177,7 @@ def _main(
     """helper function to reduce indentation in main"""
 
     # collect available cumulative time_ids
-    ts = model.time_ids
+    ts = model.metadata.time_freq_support.n_sets
     logger.debug("Detected cumulative time ids: %s", ts)
 
     if model_ip:
@@ -197,7 +197,7 @@ def _main(
         #         "Mesh for results at IPs not identical to base mesh"
         #     )
 
-        ts_ip = model_ip.time_ids
+        ts_ip = model_ip.metadata.time_freq_support.n_sets
         logger.debug("Detected ip model cumulative time ids: %s", ts_ip)
         if not np.all(ts == ts_ip):
             msg = "Base and IP results do not share identical time support"
