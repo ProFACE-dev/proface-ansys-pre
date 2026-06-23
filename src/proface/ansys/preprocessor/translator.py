@@ -28,8 +28,10 @@ logger = logging.getLogger(__name__)
 
 # save results in single precision
 RES_DTYPE = np.float32
+COMPLEX_RES_DTYPE = np.complex64
 # intermediate computations in double precision
 TMP_DTYPE = np.float64
+COMPLEX_TMP_DTYPE = np.complex128
 # relative tolerance for equality testing
 RTOL = np.finfo(RES_DTYPE).eps.item()
 # absolute tolerance for equality testing
@@ -323,17 +325,16 @@ def _s_nod(
 
     for code, ids, _conn in model.get_3del():
         scoping = dpf.Scoping(location=dpf.locations.elemental_nodal, ids=ids)
-        st = (
-            model.results.stress(time_scoping=time_id, mesh_scoping=scoping)
-            .outputs.fields_container()
-            .get_field_by_time_id(time_id)
-        )
+        st, st_imag = _stress_fields(model, time_id, scoping)
         if st is None:
             logger.error("Unable to get stresses for time id %d", time_id)
             continue
 
         assert st is not None
         st = st.to_nodal()
+        if st_imag is not None:
+            st_imag = st_imag.to_nodal()
+            _assert_same_field_layout(st, st_imag)
 
         # FIXME FIXME: do *not* get node ids from h5
         node_ids_h5 = h5.file[f"elements/{code}/nodes"][()]
@@ -341,8 +342,9 @@ def _s_nod(
         perm = np.searchsorted(node_ids_h5, st.scoping.ids)
         assert np.all(node_ids_h5[perm] == st.scoping.ids)
 
-        out = np.empty(shape=st.shape, dtype=RES_DTYPE)
-        out[perm] = st.data[..., V_PERM]
+        data = _field_data(st, st_imag)[..., V_PERM]
+        out = np.empty(shape=st.shape, dtype=data.dtype)
+        out[perm] = data
         h5.create_dataset(f"S/nodal_averaged/{code}", data=out)
         h5.create_dataset(f"SP/nodal_averaged/{code}", data=_sp(out))
 
@@ -393,11 +395,7 @@ def _svol_ip(
         # S, SP
         #
         scoping = dpf.Scoping(location=dpf.locations.elemental_nodal, ids=ids)
-        st = (
-            model.results.stress(time_scoping=time_id, mesh_scoping=scoping)
-            .outputs.fields_container()
-            .get_field_by_time_id(time_id)
-        )
+        st, st_imag = _stress_fields(model, time_id, scoping)
         if st is None:
             logger.error("Unable to get stresses for time id %d", time_id)
             continue
@@ -405,12 +403,20 @@ def _svol_ip(
         assert st is not None
         assert st.location == "ElementalNodal"
         assert np.all(st.scoping.ids == ids)
+        if st_imag is not None:
+            _assert_same_field_layout(st, st_imag)
 
         if centroid:
             st = dpf.operators.averaging.elemental_mean(
                 field=st
             ).outputs.field()
             assert st.location == "Elemental"
+            if st_imag is not None:
+                st_imag = dpf.operators.averaging.elemental_mean(
+                    field=st_imag
+                ).outputs.field()
+                assert st_imag.location == "Elemental"
+                _assert_same_field_layout(st, st_imag)
 
         assert np.all(st.scoping.ids == ids)
 
@@ -421,7 +427,9 @@ def _svol_ip(
         _, n_comp = st.elementary_data_shape
         assert _ == 1
 
-        out = st.data.reshape((-1, n_ip, n_comp))[..., V_PERM]
+        out = _field_data(st, st_imag).reshape((-1, n_ip, n_comp))[
+            ..., V_PERM
+        ]
         assert out.shape == (len(ids), n_ip, n_comp)
 
         h5.create_dataset(f"S/integration_point/{code}", data=out)
@@ -457,6 +465,47 @@ def _svol_ip(
         )
 
 
+def _stress_fields(
+    model: Model, time_id: AnsysCumulativeTimeID, scoping: dpf.Scoping
+) -> tuple[Any | None, Any | None]:
+    """Return real and optional imaginary stress fields."""
+    fc = model.results.stress(
+        time_scoping=time_id, mesh_scoping=scoping
+    ).outputs.fields_container()
+    real = fc.get_field_by_time_id(time_id)
+    if real is None:
+        return None, None
+
+    if not fc.has_label("complex"):
+        return real, None
+
+    imag = fc.get_imaginary_field(time_id)
+    if imag is None:
+        msg = f"Imaginary stresses unavailable for time id {time_id}"
+        raise AnsysTranslatorError(msg)
+    _assert_same_field_layout(real, imag)
+    return real, imag
+
+
+def _assert_same_field_layout(real: Any, imag: Any) -> None:
+    assert real.location == imag.location
+    assert real.elementary_data_count == imag.elementary_data_count
+    assert real.elementary_data_shape == imag.elementary_data_shape
+    assert np.all(real.scoping.ids == imag.scoping.ids)
+
+
+def _field_data(real: Any, imag: Any | None = None) -> npt.NDArray[Any]:
+    real_data = np.astype(real.data, RES_DTYPE)
+    if imag is None:
+        return real_data
+
+    imag_data = np.astype(imag.data, RES_DTYPE)
+    out = np.empty(real_data.shape, dtype=COMPLEX_RES_DTYPE)
+    out.real = real_data
+    out.imag = imag_data
+    return out
+
+
 def _decode_decimal(i: int) -> tuple[int, int, int]:
     """solve for a, b, c from
     i = (a * 100 + b) * 100 + c"""
@@ -468,7 +517,7 @@ def _decode_decimal(i: int) -> tuple[int, int, int]:
     return a, b, c
 
 
-def _sp(s: np.ndarray) -> npt.NDArray[RES_DTYPE]:
+def _sp(s: np.ndarray) -> npt.NDArray[Any]:
     """compute principal stresses from array 's'"""
     logger.debug("Compute principal stresses SP")
 
@@ -477,17 +526,21 @@ def _sp(s: np.ndarray) -> npt.NDArray[RES_DTYPE]:
     assert _ == len(VOIGT_NOTATION)
 
     # st is a (*sdim)-stack of 2-tensors in a DIM dimensional space
-    st = np.zeros(shape=(*sdim, DIM, DIM), dtype=TMP_DTYPE)
+    tmp_dtype = COMPLEX_TMP_DTYPE if np.iscomplexobj(s) else TMP_DTYPE
+    st = np.zeros(shape=(*sdim, DIM, DIM), dtype=tmp_dtype)
 
-    # lperm is tensor to Voigt indices permutation, UPLO=U
+    # tperm is tensor to Voigt indices permutation, UPLO=U for real tensors
 
-    lperm: tuple[EllipsisType, tuple[int], tuple[int]] = (
+    tperm: tuple[EllipsisType, tuple[int, ...], tuple[int, ...]] = (
         ...,
         *zip(*VOIGT_NOTATION, strict=True),
     )  # type: ignore[assignment]
-    st[lperm] = s
+    st[tperm] = s
+    st[(..., tperm[2], tperm[1])] = s
 
     # return eigenvalues, i.e. principal stresses
+    if np.iscomplexobj(st):
+        return np.linalg.eigvals(st).astype(COMPLEX_RES_DTYPE)
     return np.linalg.eigvalsh(st, UPLO="U").astype(RES_DTYPE)
 
     # here a rhs permutation
